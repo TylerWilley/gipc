@@ -56,6 +56,12 @@ if WINDOWS:
 log = logging.getLogger("gipc")
 
 
+# Python 3.8 changed the default subprocess method from 
+# fork to spawn. Spawn does not copy any state from the
+# old process. So we should force forking.
+multiprocessing.set_start_method('fork')
+
+
 class GIPCError(Exception):
     """Is raised upon general errors. All other exception types derive from
     this one.
@@ -327,21 +333,12 @@ def _child(target, args, kwargs):
         # could even reset sigprocmask (Python 2.x does not have API for it, but
         # it could be done via ctypes).
         _reset_signal_handlers()
+
         # `gevent.reinit` calls `libev.ev_loop_fork()`, which reinitialises
         # the kernel state for backends that have one. Must be called in the
         # child before using further libev API.
         gevent.reinit()
-        log.debug("Delete current hub's threadpool.")
-        hub = gevent.get_hub()
-        # Delete threadpool before hub destruction, otherwise `hub.destroy()`
-        # might block forever upon `ThreadPool.kill()` as of gevent 1.0rc2.
-        del hub.threadpool
-        hub._threadpool = None
-        # Destroy default event loop via `libev.ev_loop_destroy()` and delete
-        # hub. This orphans all registered events and greenlets that have been
-        # duplicated from the parent via fork().
-        log.debug("Destroy hub and default loop.")
-        hub.destroy(destroy_loop=True)
+
         # Create a new hub and a new default event loop via
         # `libev.gevent_ev_default_loop`.
         h = gevent.get_hub(default=True)
@@ -639,6 +636,8 @@ class _GIPCHandle(object):
             # inherited after forking, i.e. it is sufficient to make fd
             # nonblocking only once.
             gevent.os.make_nonblocking(self._fd)
+        if hasattr(gevent.os, 'set_inheritable'):
+            gevent.os.set_inheritable(self._fd, True)
 
     def close(self):
         """Close underlying file descriptor and de-register handle from further

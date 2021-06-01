@@ -18,18 +18,25 @@ import random
 import logging
 import multiprocessing
 
-
 import gevent
 import gevent.queue
+import gevent.signal
+from gevent import monkey
+
 sys.path.insert(0, os.path.abspath('..'))
 from gipc import start_process, pipe, GIPCError, GIPCClosed, GIPCLocked
 from gipc.gipc import _get_all_handles as get_all_handles
 from gipc.gipc import _set_all_handles as set_all_handles
 from gipc.gipc import _signals_to_reset as signals_to_reset
 
-
 from pytest import raises, mark
 
+"""
+This is necessary so that fork executes gevent.reinit automatically.
+If we do not patch, then gevent will not automatically execute reinit
+on fork and it causes problems.
+""" 
+monkey.patch_all()
 
 logging.basicConfig(
     format='%(asctime)s,%(msecs)-6.1f [%(process)-5d]%(funcName)s# %(message)s',
@@ -271,7 +278,8 @@ class TestProcess(object):
         _call_close_method_if_exists(p)
 
     def test_terminate(self):
-        p = start_process(gevent.sleep, args=(1,))
+        # 1s is too long, and the process is killed on python 3.8.6
+        p = start_process(gevent.sleep, args=(0.5,))
         # Test __repr__ and __str__
         p.__repr__()
         p.terminate()
@@ -1333,7 +1341,7 @@ class TestSignals(object):
     def test_orphaned_signal_watcher(self):
         # Install libev-based signal watcher.
         try:
-            s = gevent.signal(signal.SIGTERM, signals_test_sigterm_handler)
+            s = gevent.signal.signal(signal.SIGTERM, signals_test_sigterm_handler)
         except AttributeError:
             # This function got renamed in gevent 1.5
             s = gevent.signal_handler(signal.SIGTERM, signals_test_sigterm_handler)
@@ -1365,7 +1373,7 @@ class TestSignals(object):
                 assert p.exitcode == -signal.SIGTERM
             else:
                 assert p.exitcode == signal.SIGTERM
-        s.cancel()
+        gevent.signal.signal(signal.SIGTERM, s)
 
     @mark.skipif('WINDOWS')
     def test_signal_handlers_default(self):
@@ -1386,6 +1394,7 @@ def signals_test_sigterm_handler():
 
 def signals_test_child_a(w):
     w.put(os.getpid())
+    w.close()
     gevent.sleep(SHORTTIME)
     sys.exit(0)
 
