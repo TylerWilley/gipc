@@ -21,7 +21,6 @@ import multiprocessing
 import gevent
 import gevent.queue
 import gevent.signal
-from gevent import monkey
 
 sys.path.insert(0, os.path.abspath('..'))
 from gipc import start_process, pipe, GIPCError, GIPCClosed, GIPCLocked
@@ -30,13 +29,6 @@ from gipc.gipc import _set_all_handles as set_all_handles
 from gipc.gipc import _signals_to_reset as signals_to_reset
 
 from pytest import raises, mark
-
-"""
-This is necessary so that fork executes gevent.reinit automatically.
-If we do not patch, then gevent will not automatically execute reinit
-on fork and it causes problems.
-""" 
-monkey.patch_all()
 
 logging.basicConfig(
     format='%(asctime)s,%(msecs)-6.1f [%(process)-5d]%(funcName)s# %(message)s',

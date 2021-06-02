@@ -43,6 +43,7 @@ import gevent
 import gevent.os
 import gevent.lock
 import gevent.event
+from gevent.hub import set_hub
 
 
 # Decide which method to use for transferring WinAPI pipe handles to children.
@@ -59,7 +60,13 @@ log = logging.getLogger("gipc")
 # Python 3.8 changed the default subprocess method from 
 # fork to spawn. Spawn does not copy any state from the
 # old process. So we should force forking.
-multiprocessing.set_start_method('fork')
+try:
+    multiprocessing.set_start_method('fork')
+except:
+    # Raises a runtime exception if already set.
+    # If not set to fork, raice an exception telling the user so
+    if multiprocessing.get_start_method() != 'fork':
+        raise Exception("gipc requires multiprocessing start method 'fork'")
 
 
 class GIPCError(Exception):
@@ -337,6 +344,15 @@ def _child(target, args, kwargs):
         # `gevent.reinit` calls `libev.ev_loop_fork()`, which reinitialises
         # the kernel state for backends that have one. Must be called in the
         # child before using further libev API.
+        hub = gevent.get_hub()
+        
+        # Destroy the loop, to prevent any old greenlets from processing
+        hub.loop.destroy()
+        hub.loop = None
+
+        # Set hub to None to force a new hub and loop to create
+        set_hub(None)
+
         gevent.reinit()
 
         # Create a new hub and a new default event loop via
