@@ -672,8 +672,6 @@ class _GIPCHandle(object):
             # inherited after forking, i.e. it is sufficient to make fd
             # nonblocking only once.
             gevent.os.make_nonblocking(self._fd)
-        if hasattr(gevent.os, 'set_inheritable'):
-            gevent.os.set_inheritable(self._fd, True)
 
     def close(self):
         """Close underlying file descriptor and de-register handle from further
