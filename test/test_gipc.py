@@ -345,7 +345,13 @@ class TestProcess(object):
 
     @mark.skipif('WINDOWS')
     def test_exitcode_previous_to_join(self):
-        p = start_process(lambda: gevent.sleep(SHORTTIME))
+        p = None
+        if multiprocessing.get_start_method() == 'spawn':
+            # Spawn cannot pass lambdas to subprocesses
+            # as the process space is not copied
+            p = start_process(gevent.sleep, (SHORTTIME,))
+        else:
+            p = start_process(lambda: gevent.sleep(SHORTTIME))
         # Assume that the child process is still alive when the next
         # line is executed by the interpreter (there is no guarantee
         # for that, but it's rather likely).

@@ -26,6 +26,7 @@ import codecs
 import logging
 import multiprocessing
 import multiprocessing.process
+import multiprocessing.reduction as mpreduction
 from itertools import chain
 
 try:
@@ -60,6 +61,7 @@ log = logging.getLogger("gipc")
 # Python 3.8 changed the default subprocess method from 
 # fork to spawn. Spawn does not copy any state from the
 # old process. So we should force forking.
+"""
 try:
     multiprocessing.set_start_method('fork')
 except:
@@ -67,7 +69,7 @@ except:
     # If not set to fork, raice an exception telling the user so
     if multiprocessing.get_start_method() != 'fork':
         raise Exception("gipc requires multiprocessing start method 'fork'")
-
+"""
 
 class GIPCError(Exception):
     """Is raised upon general errors. All other exception types derive from
@@ -1071,6 +1073,27 @@ class _GIPCWriter(_GIPCHandle):
         with self._lock:
             bindata = self._encoder(o)
             self._write(struct.pack("!i", len(bindata)) + bindata)
+
+
+def reduce_GIPCReader(reader):
+    df = mpreduction.DupFd(reader._fd)
+    return (rebuild_GIPCReader, (df, reader._decoder))
+
+def rebuild_GIPCReader(df, decoder):
+    fd = df.detach()
+    return _GIPCReader(fd, decoder)
+
+mpreduction.register(_GIPCReader, reduce_GIPCReader)
+
+def reduce_GIPCWriter(writer):
+    df = mpreduction.DupFd(writer._fd)
+    return (rebuild_GIPCWriter, (df, writer._encoder))
+
+def rebuild_GIPCWriter(df, _encoder):
+    fd = df.detach()
+    return _GIPCWriter(fd, _encoder)
+
+mpreduction.register(_GIPCWriter, reduce_GIPCWriter)
 
 
 class _PairContext(tuple):
